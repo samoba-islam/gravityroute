@@ -150,6 +150,65 @@ sudo certbot --nginx -d proxy.yourdomain.com
 
 ---
 
+## 🌍 Public Port & Remote Access Guide
+
+### Does GravityRoute work with a public port?
+**Yes!** GravityRoute is designed out-of-the-box to bind to `0.0.0.0` (all IPv4 network interfaces). This allows external developers, remote IDEs (Cursor, VS Code, Claude Code CLI), mobile devices, and microservices to reach the proxy via your server's public IP address:
+
+```
+http://<YOUR_PUBLIC_IP>:8080
+```
+
+### Specifying a Custom Public Port
+You can run on any port (such as `80`, `3000`, `8080`, `8443`):
+
+1. **During One-Click Installation**:
+   ```bash
+   # Specify via flag
+   curl -fsSL https://raw.githubusercontent.com/samoba-islam/gravityroute/main/install.sh | sudo bash -s -- --port 8080
+
+   # Or via environment variable
+   curl -fsSL https://raw.githubusercontent.com/samoba-islam/gravityroute/main/install.sh | sudo PORT=3000 bash
+   ```
+
+2. **On an Existing Systemd Service**:
+   Edit `/etc/systemd/system/gravityroute.service`:
+   ```ini
+   Environment=PORT=3000
+   ```
+   Then reload and restart:
+   ```bash
+   sudo systemctl daemon-reload
+   sudo systemctl restart gravityroute
+   ```
+
+### Firewall Configuration for Public Ports
+To ensure incoming traffic reaches GravityRoute, open the port in your Linux firewall and cloud security groups:
+
+1. **UFW (Ubuntu / Debian)**:
+   ```bash
+   sudo ufw allow 8080/tcp
+   sudo ufw reload
+   ```
+   *(Note: The `install.sh` script detects and enables this automatically).*
+
+2. **firewalld (CentOS / RHEL / Rocky / Fedora)**:
+   ```bash
+   sudo firewall-cmd --permanent --add-port=8080/tcp
+   sudo firewall-cmd --reload
+   ```
+
+3. **Cloud Provider Security Groups (AWS / GCP / Oracle / Azure / DigitalOcean)**:
+   - Ensure the Inbound Security Group rule allows **TCP Port 8080** (or your custom port) from source `0.0.0.0/0` (or your specific client IP).
+
+### Security Best Practices When Exposing to the Public Internet
+1. **Web Console Authentication**: Keep **WebUI Auth** enabled in `#settings/auth` with a strong password.
+2. **Granular API Keys**: Require API keys for client proxying and generate unique `gr-...` keys in the `#api-keys` tab.
+3. **Per-Key IP Whitelisting**: For production keys, restrict access to your home or office IP/CIDR block.
+4. **HTTPS / SSL Encryption**: Put Nginx or Caddy with Let's Encrypt in front so credentials and tokens are encrypted in transit over the internet.
+
+---
+
 ## 🗑️ Uninstallation
 
 To cleanly remove GravityRoute and its systemd service:

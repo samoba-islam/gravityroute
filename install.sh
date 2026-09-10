@@ -305,7 +305,7 @@ setup_systemd_service() {
     NODE_BIN="$(command -v node)"
     PORT="${PORT:-8080}"
 
-    log_info "Configuring systemd service at ${SERVICE_FILE}..."
+    log_info "Configuring systemd service at ${SERVICE_FILE} (Binding 0.0.0.0:${PORT})..."
 
     cat > "${SERVICE_FILE}" << EOF
 [Unit]
@@ -323,6 +323,7 @@ ExecStart=${NODE_BIN} ${INSTALL_DIR}/src/index.js
 Restart=always
 RestartSec=5
 Environment=NODE_ENV=production
+Environment=HOST=0.0.0.0
 Environment=PORT=${PORT}
 Environment=CLAUDE_CONFIG_PATH=${REAL_HOME}/.claude
 StandardOutput=journal
@@ -339,7 +340,17 @@ EOF
     systemctl enable gravityroute.service
     systemctl restart gravityroute.service
 
-    log_success "Enabled and started ${BOLD}gravityroute.service${RESET} (Auto-restart on reboot enabled)"
+    # Automated Firewall configuration for public port access
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qw "active"; then
+        log_info "Detected active UFW firewall. Opening port ${PORT}/tcp for public access..."
+        ufw allow "${PORT}/tcp" || true
+    elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+        log_info "Detected active firewalld. Opening port ${PORT}/tcp for public access..."
+        firewall-cmd --permanent --add-port="${PORT}/tcp" >/dev/null 2>&1 || true
+        firewall-cmd --reload >/dev/null 2>&1 || true
+    fi
+
+    log_success "Enabled and started ${BOLD}gravityroute.service${RESET} on ${BOLD}0.0.0.0:${PORT}${RESET} (Auto-restart on reboot enabled)"
 }
 
 # ------------------------------------------------------------------------------
@@ -431,16 +442,34 @@ uninstall_gravityroute() {
 main() {
     print_banner
 
-    if [ "${1:-}" = "--uninstall" ]; then
-        check_privileges
-        uninstall_gravityroute
-    elif [ "${1:-}" = "--help" ] || [ "${1:-}" = "-h" ]; then
-        echo "Usage: sudo bash install.sh [OPTIONS]"
-        echo "Options:"
-        echo "  --help, -h       Show this help message"
-        echo "  --uninstall      Remove systemd service and symlinks"
-        exit 0
-    fi
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --port|-p)
+                if [ -n "${2:-}" ]; then
+                    PORT="$2"
+                    shift 2
+                else
+                    log_error "Missing port number after $1"
+                    exit 1
+                fi
+                ;;
+            --uninstall)
+                check_privileges
+                uninstall_gravityroute
+                ;;
+            --help|-h)
+                echo "Usage: sudo bash install.sh [OPTIONS]"
+                echo "Options:"
+                echo "  -p, --port <port>  Specify custom public port (default: 8080 or PORT env var)"
+                echo "  -h, --help         Show this help message"
+                echo "  --uninstall        Remove systemd service and symlinks"
+                exit 0
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
 
     check_privileges
     detect_os
