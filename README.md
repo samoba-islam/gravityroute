@@ -88,7 +88,19 @@ Seamlessly connect with **Claude Code CLI**, **Cursor**, **Continue.dev**, **Ope
 
 ## 📦 Installation
 
-### Option 1: Global Install via npm (Recommended)
+### Option 1: One-Click Linux / Cloud VPS Setup (Automated)
+
+Installs **Node.js 20 LTS** and build tools (if missing), sets up GravityRoute, and configures a **systemd service** so the proxy automatically starts on boot and restarts if interrupted:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/samoba-islam/gravityroute/main/install.sh | sudo bash
+```
+
+*Compatible with Ubuntu, Debian, CentOS, RHEL, Fedora, Rocky Linux, AlmaLinux, Arch, and Alpine.* See [Linux Service Documentation](docs/linux-service.md) for management details.
+
+---
+
+### Option 2: Global Install via npm
 
 ```bash
 # Install globally
@@ -106,7 +118,9 @@ npx gravityroute@latest start
 
 *(CLI aliases `gravityRoute`, `acc`, and legacy `antigravity-claude-proxy` are also available for backward compatibility).*
 
-### Option 2: Clone from GitHub
+---
+
+### Option 3: Clone from GitHub
 
 ```bash
 git clone https://github.com/samoba-islam/gravityroute.git
@@ -114,6 +128,7 @@ cd gravityroute
 npm install
 npm start
 ```
+
 
 ---
 
@@ -248,6 +263,7 @@ console.log(response.choices[0].message.content);
 
 | Guide | Description |
 | :--- | :--- |
+| [Linux Setup & Systemd Auto-Restart](docs/linux-service.md) | One-click Linux installer, auto-restart on reboot, and systemd management |
 | [Web Management Console](docs/web-console.md) | Complete walkthrough of UI tabs, metrics, logs, and settings |
 | [API Endpoints Reference](docs/api-endpoints.md) | Full endpoint catalog including `/api/keys`, `/api/providers/custom`, and auth |
 | [Multi-Account Load Balancing](docs/load-balancing.md) | Strategy details (Hybrid, Sticky, Round-Robin) and quota failover logic |

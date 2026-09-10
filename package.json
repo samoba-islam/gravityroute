@@ -13,7 +13,8 @@
   "files": [
     "src",
     "bin",
-    "public"
+    "public",
+    "install.sh"
   ],
   "scripts": {
     "build": "npm run build:css",
