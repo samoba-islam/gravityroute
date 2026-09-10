@@ -149,23 +149,29 @@ install_system_dependencies() {
         debian)
             export DEBIAN_FRONTEND=noninteractive
             apt-get update -y -qq || true
-            apt-get install -y -qq curl git build-essential ca-certificates gnupg tar gzip || {
+            # Pre-seed iptables-persistent so it installs silently without prompts
+            if command -v debconf-set-selections >/dev/null 2>&1; then
+                echo "iptables-persistent iptables-persistent/autosave_v4 boolean true" | debconf-set-selections 2>/dev/null || true
+                echo "iptables-persistent iptables-persistent/autosave_v6 boolean true" | debconf-set-selections 2>/dev/null || true
+            fi
+            apt-get install -y -qq curl git build-essential iptables iptables-persistent netfilter-persistent ca-certificates gnupg tar gzip 2>/dev/null || \
+            apt-get install -y -qq curl git build-essential iptables ca-certificates gnupg tar gzip || {
                 log_warn "Failed to install some build dependencies via apt; continuing..."
             }
             ;;
         rhel)
-            ${PKG_MANAGER} install -y curl git make gcc gcc-c++ ca-certificates tar gzip || true
+            ${PKG_MANAGER} install -y curl git make gcc gcc-c++ iptables iptables-services ca-certificates tar gzip || true
             ;;
         arch)
-            pacman -Sy --noconfirm curl git base-devel tar gzip || true
+            pacman -Sy --noconfirm curl git base-devel iptables tar gzip || true
             ;;
         alpine)
             apk update
-            apk add --no-cache curl git build-base bash tar gzip ca-certificates
+            apk add --no-cache curl git build-base bash iptables tar gzip ca-certificates
             ;;
         suse)
             zypper refresh -y || true
-            zypper install -y curl git make gcc gcc-c++ tar gzip || true
+            zypper install -y curl git make gcc gcc-c++ iptables tar gzip || true
             ;;
         *)
             log_warn "Please ensure curl, git, and a C++ compiler are installed on this system."
@@ -337,17 +343,45 @@ EOF
 
     chmod 644 "${SERVICE_FILE}"
     systemctl daemon-reload
-    systemctl enable gravityroute.service
-    systemctl restart gravityroute.service
+    # --------------------------------------------------------------------------
+    # Multi-Layer Automated Firewall Configuration (OS Level)
+    # --------------------------------------------------------------------------
+    log_info "Configuring OS firewall rules to ensure port ${PORT}/tcp is publicly accessible..."
 
-    # Automated Firewall configuration for public port access
-    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qw "active"; then
-        log_info "Detected active UFW firewall. Opening port ${PORT}/tcp for public access..."
-        ufw allow "${PORT}/tcp" || true
-    elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
-        log_info "Detected active firewalld. Opening port ${PORT}/tcp for public access..."
+    # 1. Native iptables (Essential for Oracle Cloud, custom Linux images, and raw VPS)
+    if command -v iptables >/dev/null 2>&1; then
+        # Check if rule already exists at top
+        if ! iptables -C INPUT -p tcp --dport "${PORT}" -j ACCEPT >/dev/null 2>&1; then
+            iptables -I INPUT 1 -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
+            log_success "Added iptables rule: ACCEPT incoming TCP on port ${PORT}"
+        fi
+    fi
+
+    if command -v ip6tables >/dev/null 2>&1; then
+        if ! ip6tables -C INPUT -p tcp --dport "${PORT}" -j ACCEPT >/dev/null 2>&1; then
+            ip6tables -I INPUT 1 -p tcp --dport "${PORT}" -j ACCEPT 2>/dev/null || true
+        fi
+    fi
+
+    # 2. Persist iptables rules across reboots
+    if command -v netfilter-persistent >/dev/null 2>&1; then
+        netfilter-persistent save >/dev/null 2>&1 || true
+    elif [ -d /etc/iptables ]; then
+        iptables-save > /etc/iptables/rules.v4 2>/dev/null || true
+        ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
+    fi
+
+    # 3. UFW (Ubuntu / Debian)
+    if command -v ufw >/dev/null 2>&1; then
+        ufw allow "${PORT}/tcp" >/dev/null 2>&1 || true
+        log_success "Allowed port ${PORT}/tcp in UFW"
+    fi
+
+    # 4. firewalld (RHEL / CentOS / Rocky / Fedora / AlmaLinux)
+    if command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
         firewall-cmd --permanent --add-port="${PORT}/tcp" >/dev/null 2>&1 || true
         firewall-cmd --reload >/dev/null 2>&1 || true
+        log_success "Allowed port ${PORT}/tcp in firewalld"
     fi
 
     log_success "Enabled and started ${BOLD}gravityroute.service${RESET} on ${BOLD}0.0.0.0:${PORT}${RESET} (Auto-restart on reboot enabled)"
@@ -403,6 +437,11 @@ verify_installation() {
     echo -e "  1. Open ${CYAN}http://${PUBLIC_IP}:${PORT}${RESET} in your browser."
     echo -e "  2. Link your Google account(s) or add custom AI providers in the dashboard."
     echo -e "  3. Configure Claude Code CLI or Cursor to use ${CYAN}http://localhost:${PORT}${RESET}.\n"
+
+    echo -e "${YELLOW}${BOLD}🌐 Cloud VPS & Public Access Reminder:${RESET}"
+    echo -e "  Local OS firewalls (iptables, UFW, firewalld) have been configured automatically."
+    echo -e "  If you are on a Cloud VPS (AWS, Oracle Cloud, GCP, Azure, DigitalOcean), please"
+    echo -e "  ensure ${BOLD}Inbound TCP port ${PORT}${RESET} is allowed in your Cloud Provider's Security Group / VCN rules.\n"
 }
 
 # ------------------------------------------------------------------------------
