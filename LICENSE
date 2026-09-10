@@ -1,0 +1,53 @@
+GravityRoute Community and Commercial License
+
+Copyright (c) 2026 Shawon Hossain Samoba <shawon.hossain.samoba.bd@gmail.com>
+All rights reserved.
+
+Historical attribution:
+Portions of this software are derived from prior open-source work 
+Copyright (c) 2024 Badri Narayanan S, licensed under the MIT License.
+
+==============================================================================
+TERMS AND CONDITIONS
+==============================================================================
+
+1. GRANT FOR PERSONAL, RESEARCH, AND SMALL-TEAM USE
+Subject to the terms of this License, permission is hereby granted, free of 
+charge, to any person, educational entity, or small team to use, copy, modify, 
+and execute the Software solely under the following conditions:
+  (a) Personal and non-commercial use, individual study, and research; OR
+  (b) Internal development, evaluation, and operational use within any team, 
+      organization, business, or entity comprising a MAXIMUM OF FIVE (5) 
+      MEMBERS / ACTIVE USERS.
+
+2. COMMERCIAL, ENTERPRISE, AND INDUSTRIAL LICENSE REQUIRED
+Any deployment or utilization of the Software that meets ANY of the following 
+criteria is strictly prohibited under the free grant and REQUIRES A CUSTOM 
+COMMERCIAL LICENSE:
+  (a) Use within or on behalf of an organization, enterprise, corporation, 
+      or team exceeding five (5) members/users; OR
+  (b) Production, industrial, or enterprise deployment; OR
+  (c) Commercial SaaS hosting, commercial proxy reselling, or incorporation 
+      into commercial products or services.
+
+To obtain or purchase a Commercial License, please contact:
+Shawon Hossain Samoba
+Email: shawon.hossain.samoba.bd@gmail.com
+GitHub: https://github.com/samoba-islam/gravityroute
+
+3. RESTRICTIONS
+  (a) You may not sublicense, rent, lease, sell, or commercially redistribute 
+      the Software or modified versions without an explicit commercial license 
+      agreement from the copyright holder.
+  (b) All copies or substantial portions of the Software must retain this 
+      complete copyright notice, license terms, and upstream attributions.
+
+4. DISCLAIMER OF WARRANTY & LIMITATION OF LIABILITY
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
