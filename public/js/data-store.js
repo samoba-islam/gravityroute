@@ -109,7 +109,11 @@ const initDataStore = () => {
             }
         },
 
+        _fetchInProgress: false,
+
         async fetchData() {
+            if (this._fetchInProgress) return;
+            this._fetchInProgress = true;
             // Only show skeleton on initial load if we didn't restore from cache
             if (this.initialLoad) {
                 this.loading = true;
@@ -165,6 +169,7 @@ const initDataStore = () => {
                 const store = Alpine.store('global');
                 store.showToast(store.t('connectionLost'), 'error');
             } finally {
+                this._fetchInProgress = false;
                 this.loading = false;
                 this.initialLoad = false; // Mark initial load as complete
             }

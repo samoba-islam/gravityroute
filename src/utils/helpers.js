@@ -77,14 +77,19 @@ export function isNetworkError(error) {
  * Only applies delay when requestThrottlingEnabled is true
  * @param {string|URL} url - The URL to fetch
  * @param {RequestInit} [options] - Fetch options
+ * @param {number} [timeoutMs=15000] - Request timeout in milliseconds (default 15s)
  * @returns {Promise<Response>} Fetch response
  */
-export async function throttledFetch(url, options) {
+export async function throttledFetch(url, options = {}, timeoutMs = 15000) {
     if (config.requestThrottlingEnabled) {
         const delayMs = config.requestDelayMs || 200;
         if (delayMs > 0) {
             await sleep(delayMs);
         }
+    }
+    // Prevent indefinite hanging if remote endpoint stalls
+    if (!options.signal && timeoutMs > 0 && typeof AbortSignal?.timeout === 'function') {
+        options = { ...options, signal: AbortSignal.timeout(timeoutMs) };
     }
     return fetch(url, options);
 }

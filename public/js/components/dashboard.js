@@ -101,6 +101,17 @@ window.Components.dashboard = () => ({
                 }
             });
         }
+
+        // Render charts when tab becomes visible again
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden && this.$store?.global?.activeTab === 'dashboard') {
+                this.$nextTick(() => {
+                    this.updateStats();
+                    this.updateCharts();
+                    this.updateTrendChart();
+                });
+            }
+        });
     },
 
     processHistory(history) {

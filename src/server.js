@@ -15,7 +15,7 @@ import { config } from './config.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 import { forceRefresh } from './auth/token-extractor.js';
-import { REQUEST_BODY_LIMIT } from './constants.js';
+import { REQUEST_BODY_LIMIT, BUILTIN_MODEL_MAPPINGS } from './constants.js';
 import { AccountManager } from './account-manager/index.js';
 import { clearThinkingSignatureCache } from './format/signature-cache.js';
 import { formatDuration } from './utils/helpers.js';
@@ -424,12 +424,18 @@ app.get('/debug/raw-models', async (req, res) => {
     }
 });
 
+// In-flight quota promises map to coalesce duplicate simultaneous requests
+const inFlightQuotaFetches = new Map();
+const QUOTA_CACHE_TTL_MS = 30000; // 30 seconds fresh cache for fast UI loads/refreshes
+const SUBSCRIPTION_CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour for subscription tier / projectId
+
 app.get('/account-limits', async (req, res) => {
     try {
         await ensureInitialized();
         const allAccounts = accountManager.getAllAccounts();
         const format = req.query.format || 'json';
         const includeHistory = req.query.includeHistory === 'true';
+        const forceRefresh = req.query.force === 'true';
 
         // Fetch quotas for each account in parallel
         const results = await Promise.allSettled(
@@ -477,57 +483,108 @@ app.get('/account-limits', async (req, res) => {
                     };
                 }
 
-                try {
-                    const token = await accountManager.getTokenForAccount(account);
+                // Return cached quota if still fresh
+                const hasFreshQuota = !forceRefresh &&
+                                      account.quota?.models &&
+                                      (Date.now() - (account.quota.lastChecked || 0) < QUOTA_CACHE_TTL_MS);
 
-                    // Fetch subscription tier first to get project ID
-                    const subscription = await getSubscriptionTier(token);
-
-                    // Then fetch quotas with project ID for accurate quota info
-                    const quotas = await getModelQuotas(token, subscription.projectId);
-
-                    // Update account object with fresh data
-                    account.subscription = {
-                        tier: subscription.tier,
-                        projectId: subscription.projectId,
-                        detectedAt: Date.now()
-                    };
-                    account.quota = {
-                        models: quotas,
-                        lastChecked: Date.now()
-                    };
-
-                    // Save updated account data to disk (async, don't wait)
-                    accountManager.saveToDisk().catch(err => {
-                        logger.error('[Server] Failed to save account data:', err);
-                    });
-
+                if (hasFreshQuota) {
                     return {
                         email: account.email,
                         status: 'ok',
-                        subscription: account.subscription,
-                        models: quotas
+                        subscription: account.subscription || { tier: 'unknown', projectId: null },
+                        models: account.quota.models
                     };
-                } catch (error) {
-                    // Detect ToS ban from quota/subscription fetch and mark account invalid
-                    if (error.message?.startsWith('ACCOUNT_BANNED:')) {
-                        accountManager.markInvalid(account.email, 'Account banned — Gemini disabled for Terms of Service violation');
+                }
+
+                // If a fetch is already in flight for this account, await that same promise
+                if (inFlightQuotaFetches.has(account.email)) {
+                    return await inFlightQuotaFetches.get(account.email);
+                }
+
+                const fetchPromise = (async () => {
+                    try {
+                        const token = await accountManager.getTokenForAccount(account);
+
+                        // Only fetch subscription tier if project ID is missing or older than 1 hour
+                        const hasRecentSub = !forceRefresh &&
+                                             account.subscription?.projectId &&
+                                             account.subscription?.tier &&
+                                             (Date.now() - (account.subscription.detectedAt || 0) < SUBSCRIPTION_CACHE_TTL_MS);
+
+                        let subscription = account.subscription;
+                        let newlyDiscoveredProject = false;
+
+                        if (!hasRecentSub) {
+                            const subResult = await getSubscriptionTier(token);
+                            if (!account.subscription?.projectId && subResult.projectId) {
+                                newlyDiscoveredProject = true;
+                            }
+                            subscription = {
+                                tier: subResult.tier,
+                                projectId: subResult.projectId,
+                                detectedAt: Date.now()
+                            };
+                            account.subscription = subscription;
+                        }
+
+                        // Fetch quotas with project ID for accurate quota info
+                        const quotas = await getModelQuotas(token, subscription?.projectId);
+
+                        // Update account object in memory
+                        account.quota = {
+                            models: quotas,
+                            lastChecked: Date.now()
+                        };
+
+                        // Only persist to disk if new project metadata was discovered (don't thrash disk on every poll)
+                        if (newlyDiscoveredProject) {
+                            accountManager.saveToDisk().catch(err => {
+                                logger.error('[Server] Failed to save account data:', err);
+                            });
+                        }
+
                         return {
                             email: account.email,
-                            status: 'banned',
-                            error: 'Account banned — Gemini disabled for Terms of Service violation',
+                            status: 'ok',
+                            subscription: account.subscription,
+                            models: quotas
+                        };
+                    } catch (error) {
+                        // Detect ToS ban from quota/subscription fetch and mark account invalid
+                        if (error.message?.startsWith('ACCOUNT_BANNED:')) {
+                            accountManager.markInvalid(account.email, 'Account banned — Gemini disabled for Terms of Service violation');
+                            return {
+                                email: account.email,
+                                status: 'banned',
+                                error: 'Account banned — Gemini disabled for Terms of Service violation',
+                                subscription: account.subscription || { tier: 'unknown', projectId: null },
+                                models: {}
+                            };
+                        }
+                        // If we have cached quota from a previous check, return it rather than breaking the UI
+                        if (account.quota?.models) {
+                            return {
+                                email: account.email,
+                                status: 'ok',
+                                subscription: account.subscription || { tier: 'unknown', projectId: null },
+                                models: account.quota.models
+                            };
+                        }
+                        return {
+                            email: account.email,
+                            status: 'error',
+                            error: error.message,
                             subscription: account.subscription || { tier: 'unknown', projectId: null },
                             models: {}
                         };
+                    } finally {
+                        inFlightQuotaFetches.delete(account.email);
                     }
-                    return {
-                        email: account.email,
-                        status: 'error',
-                        error: error.message,
-                        subscription: account.subscription || { tier: 'unknown', projectId: null },
-                        models: {}
-                    };
-                }
+                })();
+
+                inFlightQuotaFetches.set(account.email, fetchPromise);
+                return await fetchPromise;
             })
         );
 
@@ -866,6 +923,10 @@ app.post('/v1/messages', async (req, res) => {
         if (modelMapping[requestedModel] && modelMapping[requestedModel].mapping) {
             const targetModel = modelMapping[requestedModel].mapping;
             logger.info(`[Server] Mapping model ${requestedModel} -> ${targetModel}`);
+            requestedModel = targetModel;
+        } else if (BUILTIN_MODEL_MAPPINGS[requestedModel]) {
+            const targetModel = BUILTIN_MODEL_MAPPINGS[requestedModel];
+            logger.info(`[Server] Built-in mapping model ${requestedModel} -> ${targetModel}`);
             requestedModel = targetModel;
         }
 

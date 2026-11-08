@@ -17,6 +17,7 @@ const initApp = () => {
     Alpine.data('apiKeys', window.Components.apiKeys);
     Alpine.data('webuiAuthConfig', window.Components.webuiAuthConfig);
     Alpine.data('smtpConfig', window.Components.smtpConfig);
+    Alpine.data('systemUpdater', window.Components.systemUpdater);
 
     const loadViewElement = (el, viewName) => {
         const token = Alpine.store('global')?.authToken || localStorage.getItem('antigravity_auth_token') || sessionStorage.getItem('antigravity_auth_token');
@@ -112,6 +113,16 @@ const initApp = () => {
             this.startAutoRefresh();
             document.addEventListener('refresh-interval-changed', () => this.startAutoRefresh());
 
+            // Refresh data when returning from background tab
+            document.addEventListener('visibilitychange', () => {
+                if (!document.hidden) {
+                    if (Alpine.store('global')?.authEnabled && !Alpine.store('global')?.authenticated) {
+                        return;
+                    }
+                    Alpine.store('data')?.fetchData();
+                }
+            });
+
             // Initial fetch is triggered automatically by store.checkAuthStatus()
         },
 
@@ -129,6 +140,10 @@ const initApp = () => {
             const interval = parseInt(Alpine.store('settings')?.refreshInterval || 60);
             if (interval > 0) {
                 this.refreshTimer = setInterval(() => {
+                    // Do not poll when tab is hidden to save memory, CPU, and Google rate limits
+                    if (document.hidden) {
+                        return;
+                    }
                     if (Alpine.store('global')?.authEnabled && !Alpine.store('global')?.authenticated) {
                         return;
                     }

@@ -75,6 +75,17 @@
                     </svg>
                     <span x-text="$store.global.t('tabSmtp') || 'SMTP'">SMTP</span>
                 </button>
+                <button @click="$store.global.settingsTab = 'system'"
+                    class="pb-3 border-b-2 transition-colors font-medium text-sm flex items-center gap-2 whitespace-nowrap"
+                    :class="$store.global.settingsTab === 'system' ? 'border-neon-purple text-white' : 'border-transparent text-gray-500 hover:text-gray-300'">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24"
+                        stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span x-text="$store.global.t('tabSystem') || 'System & Updates'">System & Updates</span>
+                    <span x-show="$store.global.hasSystemUpdate" class="w-2 h-2 rounded-full bg-neon-purple animate-ping"></span>
+                </button>
             </div>
         </div>
 
@@ -2597,6 +2608,194 @@
                         <li x-text="$store.global.t('smtpNote3')">Cloud Providers: Ensure your cloud firewall (e.g. AWS, GCP, Azure, DigitalOcean) allows outbound traffic on your chosen SMTP port.</li>
                     </ul>
                 </div>
+            </div>
+
+            <!-- Tab 7: System & Updates -->
+            <div x-show="$store.global.settingsTab === 'system'" x-data="systemUpdater" class="space-y-8 animate-fade-in">
+                <!-- Section Header -->
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-space-border/50 pb-6">
+                    <div>
+                        <h2 class="text-xl font-bold text-white flex items-center gap-2">
+                            <span>System & Updates</span>
+                            <span class="px-2 py-0.5 rounded text-[10px] font-mono uppercase bg-neon-purple/20 text-neon-purple border border-neon-purple/30">Auto-Updater</span>
+                        </h2>
+                        <p class="text-sm text-gray-400 mt-1">Check for upstream software updates, inspect commit details, and apply automated zero-downtime upgrades directly from the management console.</p>
+                    </div>
+
+                    <div class="flex items-center gap-3">
+                        <button type="button" @click="checkForUpdates(true)" :disabled="checking || updating"
+                            class="btn btn-sm btn-outline border-space-border hover:bg-space-800 text-gray-200 flex items-center gap-2">
+                            <svg class="w-4 h-4" :class="{'animate-spin': checking}" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            <span x-text="checking ? 'Checking...' : 'Check for Updates'">Check for Updates</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Error Alert -->
+                <div x-show="error" class="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-red-400 text-sm flex items-start gap-3">
+                    <svg class="w-5 h-5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                        <p class="font-semibold">Update Check Notice</p>
+                        <p class="text-xs text-red-300 mt-0.5" x-text="error"></p>
+                    </div>
+                </div>
+
+                <!-- Update Status Banner -->
+                <!-- Case A: Update Available -->
+                <div x-show="updateInfo.hasUpdate" class="p-6 rounded-2xl bg-gradient-to-r from-neon-purple/20 via-blue-900/20 to-space-900 border border-neon-purple/40 relative overflow-hidden shadow-[0_0_30px_rgba(168,85,247,0.15)]">
+                    <div class="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                        <div class="space-y-2">
+                            <div class="flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-neon-purple animate-ping"></span>
+                                <span class="text-xs font-mono font-bold tracking-wider uppercase text-neon-purple">New Version Available</span>
+                                <span class="px-2 py-0.5 rounded text-[10px] font-mono bg-neon-purple/30 text-white font-bold" x-text="updateInfo.commitsBehind + ' commit' + (updateInfo.commitsBehind > 1 ? 's' : '') + ' behind'"></span>
+                            </div>
+                            <h3 class="text-xl font-extrabold text-white">GravityRoute Update Ready to Install</h3>
+                            <p class="text-sm text-gray-300 max-w-2xl" x-show="updateInfo.latestMessage">
+                                <span class="text-gray-400 font-mono">Latest: </span>
+                                <span class="font-medium text-white" x-text="updateInfo.latestMessage"></span>
+                            </p>
+                            <p class="text-xs text-gray-400 font-mono">
+                                Current Commit: <span class="text-gray-200" x-text="updateInfo.currentCommit"></span>
+                                ➔ Remote: <span class="text-neon-cyan" x-text="updateInfo.latestCommit"></span>
+                                <span x-show="updateInfo.latestDate" class="text-gray-500 ml-2" x-text="'(' + formatDate(updateInfo.latestDate) + ')'"></span>
+                            </p>
+                        </div>
+
+                        <div class="flex-shrink-0">
+                            <button type="button" @click="applyUpdate" :disabled="updating"
+                                class="btn btn-primary bg-gradient-to-r from-neon-purple to-blue-600 hover:from-neon-purple/90 hover:to-blue-600/90 text-white border-none shadow-[0_0_20px_rgba(168,85,247,0.4)] px-6">
+                                <svg class="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                </svg>
+                                <span>⚡ One-Click Upgrade</span>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Case B: Up to Date -->
+                <div x-show="!updateInfo.hasUpdate && updateInfo.isGitRepo" class="p-6 rounded-2xl bg-space-850 border border-space-border/60">
+                    <div class="flex items-center gap-4">
+                        <div class="w-12 h-12 rounded-xl bg-neon-green/10 border border-neon-green/20 flex items-center justify-center text-neon-green flex-shrink-0">
+                            <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                            </svg>
+                        </div>
+                        <div class="space-y-1">
+                            <h3 class="text-base font-bold text-white">GravityRoute is Up to Date</h3>
+                            <p class="text-xs text-gray-400">
+                                You are running the latest version on branch <span class="text-neon-cyan font-mono" x-text="updateInfo.branch">main</span>.
+                                <span x-show="lastChecked" class="text-gray-500 ml-1" x-text="'Checked at ' + lastChecked"></span>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Case C: Not a Git Repo -->
+                <div x-show="!updateInfo.isGitRepo" class="p-6 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 text-yellow-300">
+                    <div class="flex items-start gap-4">
+                        <svg class="w-6 h-6 flex-shrink-0 mt-0.5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                        <div class="space-y-1 text-xs">
+                            <h4 class="text-sm font-bold text-yellow-200">Manual Installation Detected</h4>
+                            <p class="text-yellow-300/80">This installation is not running from a Git clone. To enable one-click updates via the Admin Panel, deploy GravityRoute via <code class="font-mono bg-black/40 px-1 py-0.5 rounded text-yellow-200">git clone https://github.com/samoba-islam/gravityroute</code> or run <code class="font-mono bg-black/40 px-1 py-0.5 rounded text-yellow-200">bash install.sh</code>.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System & Environment Information Grid -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="p-4 rounded-xl bg-space-850 border border-space-border/60">
+                        <span class="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Application Version</span>
+                        <span class="text-lg font-bold font-mono text-neon-purple mt-1 block" x-text="'v' + updateInfo.currentVersion">v1.0.0</span>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-space-850 border border-space-border/60">
+                        <span class="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Git Commit</span>
+                        <span class="text-lg font-bold font-mono text-neon-cyan mt-1 block" x-text="updateInfo.currentCommit || 'N/A'">-</span>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-space-850 border border-space-border/60">
+                        <span class="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Git Branch</span>
+                        <span class="text-lg font-bold font-mono text-white mt-1 block" x-text="updateInfo.branch || 'main'">main</span>
+                    </div>
+
+                    <div class="p-4 rounded-xl bg-space-850 border border-space-border/60">
+                        <span class="text-[10px] text-gray-500 font-mono uppercase tracking-wider block">Upstream Repository</span>
+                        <a :href="updateInfo.repoUrl" target="_blank" rel="noopener" class="text-sm font-medium text-gray-300 hover:text-white mt-1.5 flex items-center gap-1 truncate">
+                            <span class="truncate">samoba-islam/gravityroute</span>
+                            <svg class="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                        </a>
+                    </div>
+                </div>
+
+                <!-- Update Instructions & Safety Notes -->
+                <div class="bg-space-900/50 border border-space-border/60 rounded-xl p-5 text-xs text-gray-400 space-y-2">
+                    <div class="flex items-center gap-2 text-neon-purple font-semibold">
+                        <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        </svg>
+                        <span>Upgrade Pipeline & Safety Highlights</span>
+                    </div>
+                    <ul class="list-disc list-inside space-y-1 text-gray-400">
+                        <li><strong class="text-gray-300">Config Preservation:</strong> Accounts, Google OAuth tokens, and server settings are stored in <code class="font-mono bg-black/40 px-1 py-0.5 rounded text-gray-300">~/.config/antigravity-proxy/</code> and will never be overwritten.</li>
+                        <li><strong class="text-gray-300">Atomic Steps:</strong> Updates run <code class="font-mono bg-black/40 px-1 py-0.5 rounded text-gray-300">git pull --rebase</code>, install new dependencies via <code class="font-mono bg-black/40 px-1 py-0.5 rounded text-gray-300">npm install --omit=dev</code>, and recompile Tailwind styles.</li>
+                        <li><strong class="text-gray-300">Zero-Downtime Supervisor:</strong> Under systemd, the process exits cleanly and is automatically respawned with the new codebase in under 2 seconds.</li>
+                    </ul>
+                </div>
+
+                <!-- Modal: Live Update Progress -->
+                <div x-show="showModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm"
+                    x-transition:enter="ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100"
+                    x-cloak>
+                    <div class="bg-space-900 border border-space-border/80 rounded-2xl max-w-lg w-full p-6 shadow-[0_0_50px_rgba(0,0,0,0.8)] space-y-5">
+                        <div class="flex items-center justify-between border-b border-space-border/50 pb-4">
+                            <h3 class="text-lg font-bold text-white flex items-center gap-2">
+                                <svg class="w-5 h-5 text-neon-purple animate-spin" x-show="updateStatus === 'running' || updateStatus === 'restarting'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <svg class="w-5 h-5 text-neon-green" x-show="updateStatus === 'success'" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                                </svg>
+                                <span x-text="updateStatus === 'restarting' ? 'Restarting Server...' : (updateStatus === 'success' ? 'Update Complete!' : (updateStatus === 'error' ? 'Update Failed' : 'Applying Update...'))">Applying Update...</span>
+                            </h3>
+                            <button type="button" x-show="updateStatus === 'error'" @click="showModal = false" class="text-gray-400 hover:text-white">✕</button>
+                        </div>
+
+                        <!-- Progress Steps List -->
+                        <div class="space-y-2.5 font-mono text-xs">
+                            <template x-for="step in steps" :key="step.id">
+                                <div class="flex items-start gap-2.5 p-2 rounded bg-space-850/80 border border-white/5">
+                                    <span x-show="step.done" class="text-neon-green">✓</span>
+                                    <span x-show="step.active" class="w-3.5 h-3.5 rounded-full border-2 border-neon-purple border-t-transparent animate-spin inline-block"></span>
+                                    <span x-text="step.text" :class="step.done ? 'text-gray-300' : 'text-neon-cyan'"></span>
+                                </div>
+                            </template>
+                        </div>
+
+                        <!-- Error Banner in Modal -->
+                        <div x-show="error" class="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-xs">
+                            <p class="font-bold">Error:</p>
+                            <p x-text="error" class="mt-1 font-mono"></p>
+                        </div>
+
+                        <!-- Footer -->
+                        <div class="flex items-center justify-between pt-2">
+                            <span class="text-[11px] text-gray-500 font-mono" x-show="updateStatus === 'restarting'">Waiting for server restart...</span>
+                            <span class="text-[11px] text-neon-green font-mono" x-show="updateStatus === 'success'">Reloading in 1s...</span>
+                            <button type="button" x-show="updateStatus === 'error'" @click="showModal = false" class="btn btn-sm btn-outline border-space-border text-gray-300">Close</button>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
         </div>

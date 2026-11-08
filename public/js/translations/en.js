@@ -523,6 +523,7 @@ window.translations.en = {
     optional: "Optional",
     // SMTP Configuration
     tabSmtp: "SMTP",
+    tabSystem: "System & Updates",
     smtpTitle: "SMTP Configuration",
     smtpDesc: "Configure outbound SMTP server credentials for email delivery, notifications, and administrative alerts.",
     smtpStatusEnabled: "SMTP ENABLED",

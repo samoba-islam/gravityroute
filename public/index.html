@@ -531,6 +531,12 @@
                         x-text="$store.global.t('systemDesc')">GRAVITYROUTE PROXY SYSTEM</span>
                     <span class="text-[10px] text-gray-500 font-mono tracking-wider"
                         x-text="'v' + $store.global.version">v1.0.0</span>
+                    <a x-show="$store.global.hasSystemUpdate" href="#settings/system"
+                        @click="$store.global.activeTab = 'settings'; $store.global.settingsTab = 'system'"
+                        class="px-1.5 py-0.5 rounded text-[9px] font-bold tracking-wider bg-neon-purple/20 text-neon-purple border border-neon-purple/40 hover:bg-neon-purple/30 transition-all flex items-center gap-1 animate-pulse"
+                        title="New update available">
+                        <span>UPDATE</span>
+                    </a>
                 </div>
             </div>
         </div>
@@ -1278,6 +1284,7 @@
     <script src="js/components/api-keys.js?v=2.7.9"></script>
     <script src="js/components/webui-auth.js?v=2.7.8"></script>
     <script src="js/components/smtp-config.js?v=2.7.8"></script>
+    <script src="js/components/system-updater.js?v=1.0.0"></script>
     <!-- 4. App (registers Alpine components from window.Components) -->
     <script src="app.js?v=2.7.8"></script>
 </body>

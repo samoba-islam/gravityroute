@@ -69,6 +69,7 @@ window.DashboardCharts.hexToRgba = function (hex, alpha) {
  * @returns {boolean} True if canvas is ready
  */
 function isCanvasReady(canvas) {
+  if (typeof document !== 'undefined' && document.hidden) return false;
   if (!canvas || !canvas.isConnected) return false;
   if (canvas.offsetWidth === 0 || canvas.offsetHeight === 0) return false;
 
@@ -135,6 +136,7 @@ window.DashboardCharts.createDataset = function (label, data, color, canvas) {
  * @param {object} component - Dashboard component instance
  */
 window.DashboardCharts.updateCharts = function (component) {
+  if (typeof document !== 'undefined' && document.hidden) return;
   const canvas = document.getElementById("quotaChart");
 
   // Safety checks
@@ -317,6 +319,7 @@ window.DashboardCharts.updateCharts = function (component) {
  * @param {object} component - Dashboard component instance
  */
 window.DashboardCharts.updateTrendChart = function (component) {
+  if (typeof document !== 'undefined' && document.hidden) return;
   // Prevent concurrent updates (fixes race condition on rapid toggling)
   if (_trendChartUpdateLock) {
     if (window.UILogger) window.UILogger.debug("[updateTrendChart] Update already in progress, skipping");

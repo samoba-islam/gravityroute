@@ -9,7 +9,7 @@ const initGlobalStore = () => {
         init() {
             // Hash-based routing
             const validTabs = ['dashboard', 'models', 'accounts', 'providers', 'api', 'logs', 'settings'];
-            const validSettingsTabs = ['ui', 'claude', 'models', 'server', 'auth', 'smtp'];
+            const validSettingsTabs = ['ui', 'claude', 'models', 'server', 'auth', 'smtp', 'system'];
             const getHash = () => window.location.hash.substring(1);
 
             const parseHash = (hash) => {

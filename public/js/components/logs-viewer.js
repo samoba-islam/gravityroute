@@ -9,6 +9,8 @@ window.Components.logsViewer = () => ({
     isAutoScroll: true,
     eventSource: null,
     searchQuery: '',
+    _reconnectTimer: null,
+    _recentLogKeys: new Set(),
     filters: {
         INFO: true,
         WARN: true,
@@ -56,35 +58,83 @@ window.Components.logsViewer = () => ({
         }
 
         this.$watch('isAutoScroll', (val) => {
-            if (val) this.scrollToBottom();
+            if (val && Alpine.store('global')?.activeTab === 'logs') this.scrollToBottom();
         });
 
         // Watch filters to maintain auto-scroll if enabled
-        this.$watch('searchQuery', () => { if(this.isAutoScroll) this.$nextTick(() => this.scrollToBottom()) });
-        this.$watch('filters', () => { if(this.isAutoScroll) this.$nextTick(() => this.scrollToBottom()) });
+        this.$watch('searchQuery', () => {
+            if (this.isAutoScroll && Alpine.store('global')?.activeTab === 'logs') {
+                this.$nextTick(() => this.scrollToBottom());
+            }
+        });
+        this.$watch('filters', () => {
+            if (this.isAutoScroll && Alpine.store('global')?.activeTab === 'logs') {
+                this.$nextTick(() => this.scrollToBottom());
+            }
+        });
+
+        window.addEventListener('beforeunload', () => {
+            this.destroy();
+        });
+    },
+
+    destroy() {
+        if (this._reconnectTimer) {
+            clearTimeout(this._reconnectTimer);
+            this._reconnectTimer = null;
+        }
+        if (this.eventSource) {
+            try { this.eventSource.close(); } catch (e) {}
+            this.eventSource = null;
+        }
     },
 
     startLogStream() {
-        if (this.eventSource) this.eventSource.close();
+        if (this._reconnectTimer) {
+            clearTimeout(this._reconnectTimer);
+            this._reconnectTimer = null;
+        }
+        if (this.eventSource) {
+            try { this.eventSource.close(); } catch (e) {}
+            this.eventSource = null;
+        }
 
         const password = Alpine.store('global').webuiPassword;
-        const url = password
-            ? `/api/logs/stream?history=true&password=${encodeURIComponent(password)}`
-            : '/api/logs/stream?history=true';
+        // Only request history if we don't have any logs cached yet
+        const needHistory = this.logs.length === 0;
+        let url = `/api/logs/stream?history=${needHistory}`;
+        if (password) {
+            url += `&password=${encodeURIComponent(password)}`;
+        }
 
-        this.eventSource = new EventSource(url);
-        this.eventSource.onmessage = (event) => {
+        const es = new EventSource(url);
+        this.eventSource = es;
+
+        es.onmessage = (event) => {
+            if (this.eventSource !== es) return;
             try {
+                if (!event.data || !event.data.trim()) return;
                 const log = JSON.parse(event.data);
+
+                // Deduplicate incoming history logs
+                const key = `${log.timestamp}-${log.level}-${log.message}`;
+                if (this._recentLogKeys.has(key)) return;
+                this._recentLogKeys.add(key);
+                if (this._recentLogKeys.size > 2000) {
+                    // Prune oldest keys
+                    const keysArr = Array.from(this._recentLogKeys);
+                    this._recentLogKeys = new Set(keysArr.slice(-1000));
+                }
+
                 this.logs.push(log);
 
-                // Limit log buffer
-                const limit = Alpine.store('settings')?.logLimit || window.AppConstants.LIMITS.DEFAULT_LOG_LIMIT;
+                // Limit log buffer to prevent browser memory exhaustion
+                const limit = Alpine.store('settings')?.logLimit || window.AppConstants?.LIMITS?.DEFAULT_LOG_LIMIT || 1000;
                 if (this.logs.length > limit) {
                     this.logs = this.logs.slice(-limit);
                 }
 
-                if (this.isAutoScroll) {
+                if (this.isAutoScroll && Alpine.store('global')?.activeTab === 'logs') {
                     this.$nextTick(() => this.scrollToBottom());
                 }
             } catch (e) {
@@ -92,9 +142,17 @@ window.Components.logsViewer = () => ({
             }
         };
 
-        this.eventSource.onerror = () => {
-            if (window.UILogger) window.UILogger.debug('Log stream disconnected, reconnecting...');
-            setTimeout(() => this.startLogStream(), 3000);
+        es.onerror = () => {
+            if (this.eventSource !== es) return;
+            // Native EventSource auto-reconnects on transient network drops.
+            // Only manually reconnect if connection is completely CLOSED.
+            if (es.readyState === EventSource.CLOSED) {
+                if (window.UILogger) window.UILogger.debug('Log stream closed, retrying in 5s...');
+                if (this._reconnectTimer) clearTimeout(this._reconnectTimer);
+                this._reconnectTimer = setTimeout(() => {
+                    this.startLogStream();
+                }, 5000);
+            }
         };
     },
 
@@ -105,6 +163,7 @@ window.Components.logsViewer = () => ({
 
     clearLogs() {
         this.logs = [];
+        this._recentLogKeys.clear();
     },
 
     exportLogs() {

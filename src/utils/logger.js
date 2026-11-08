@@ -26,6 +26,7 @@ const COLORS = {
 class Logger extends EventEmitter {
     constructor() {
         super();
+        this.setMaxListeners(100);
         this.isDebugEnabled = false;
         this.history = [];
         this.maxHistory = 1000;

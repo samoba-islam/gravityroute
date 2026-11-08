@@ -19,6 +19,11 @@ window.utils = {
             options.headers['x-webui-password'] = webuiPassword;
         }
 
+        // Prevent hanging requests when network drops or server restarts
+        if (!options.signal && typeof AbortSignal?.timeout === 'function') {
+            options.signal = AbortSignal.timeout(20000);
+        }
+
         let response = await fetch(url, options);
 
         if (response.status === 401) {

@@ -28,6 +28,7 @@ import apiKeyManager from '../modules/api-keys.js';
 import { fetchLivePricing, getPricingStatus } from '../modules/pricing.js';
 import { verifySmtpConnection, sendTestEmail, createTransporter } from '../utils/smtp.js';
 import { fetchProviderModels } from '../providers/custom-dispatcher.js';
+import updater from '../modules/system-updater.js';
 
 // Get package version
 const packageVersion = getPackageVersion();
@@ -1658,6 +1659,37 @@ export function mountWebUI(app, dirname, accountManager) {
     });
 
     /**
+     * GET /api/system/update/check - Check for available updates
+     */
+    app.get('/api/system/update/check', async (req, res) => {
+        try {
+            const force = req.query.force === 'true';
+            const updateInfo = await updater.checkForUpdates(force);
+            res.json(updateInfo);
+        } catch (error) {
+            logger.error('[WebUI] Update check failed:', error);
+            res.status(500).json({ status: 'error', error: error.message });
+        }
+    });
+
+    /**
+     * POST /api/system/update/apply - Apply latest update and restart
+     */
+    app.post('/api/system/update/apply', async (req, res) => {
+        try {
+            logger.info(`[WebUI] System update initiated by ${req.webuiUser || 'admin'}`);
+            const result = await updater.applyUpdate();
+            res.json(result);
+
+            // Trigger graceful process restart
+            updater.restartService(2000);
+        } catch (error) {
+            logger.error('[WebUI] Update execution failed:', error);
+            res.status(500).json({ status: 'error', error: error.message });
+        }
+    });
+
+    /**
      * POST /api/config - Update server configuration
      */
     app.post('/api/config', async (req, res) => {
@@ -2523,30 +2555,85 @@ export function mountWebUI(app, dirname, accountManager) {
      */
     app.get('/api/logs/stream', (req, res) => {
         res.setHeader('Content-Type', 'text/event-stream');
-        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Cache-Control', 'no-cache, no-transform');
         res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        if (typeof res.flushHeaders === 'function') {
+            res.flushHeaders();
+        }
+
+        // Send initial connection comment
+        res.write(': connected\n\n');
+
+        let isClosed = false;
 
         const sendLog = (log) => {
-            res.write(`data: ${JSON.stringify(log)}\n\n`);
+            if (isClosed || res.writableEnded || res.destroyed) {
+                cleanup();
+                return;
+            }
+            try {
+                res.write(`data: ${JSON.stringify(log)}\n\n`);
+            } catch (err) {
+                cleanup();
+            }
         };
 
         // Send recent history if requested
         if (req.query.history === 'true' && logger.getHistory) {
-            const history = logger.getHistory();
-            history.forEach(log => sendLog(log));
+            try {
+                const history = logger.getHistory();
+                for (const log of history) {
+                    if (isClosed) break;
+                    sendLog(log);
+                }
+            } catch (err) {
+                // Ignore history send errors
+            }
         }
+
+        // Keep-alive heartbeat every 15s to detect dead connections and prevent TCP timeouts
+        const heartbeat = setInterval(() => {
+            if (isClosed || res.writableEnded || res.destroyed) {
+                cleanup();
+                return;
+            }
+            try {
+                res.write(': keep-alive\n\n');
+            } catch (err) {
+                cleanup();
+            }
+        }, 15000);
+        if (typeof heartbeat.unref === 'function') {
+            heartbeat.unref();
+        }
+
+        // Comprehensive cleanup
+        const cleanup = () => {
+            if (isClosed) return;
+            isClosed = true;
+            clearInterval(heartbeat);
+            if (logger.off) {
+                logger.off('log', sendLog);
+            }
+            if (!res.writableEnded && !res.destroyed) {
+                try {
+                    res.end();
+                } catch (e) { /* ignore */ }
+            }
+        };
 
         // Subscribe to new logs
         if (logger.on) {
             logger.on('log', sendLog);
         }
 
-        // Cleanup on disconnect
-        req.on('close', () => {
-            if (logger.off) {
-                logger.off('log', sendLog);
-            }
-        });
+        req.on('close', cleanup);
+        req.on('end', cleanup);
+        res.on('close', cleanup);
+        res.on('finish', cleanup);
+        res.on('error', cleanup);
+        req.on('error', cleanup);
     });
 
     // ==========================================

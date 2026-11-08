@@ -6,6 +6,7 @@
 
 import { config } from '../config.js';
 import { logger } from '../utils/logger.js';
+import { BUILTIN_MODEL_MAPPINGS } from '../constants.js';
 
 /**
  * Standard default mappings from OpenAI model identifiers to native Cloud Code models
@@ -59,6 +60,13 @@ export function resolveOpenAiModel(requestedModel, validModels = null) {
     if (modelMapping[trimmed] && modelMapping[trimmed].mapping) {
         const target = modelMapping[trimmed].mapping;
         logger.info(`[OpenAI-Mapper] Custom mapped ${trimmed} -> ${target}`);
+        return target;
+    }
+
+    // 1b. Check built-in model mappings (e.g. claude-3-5-sonnet-20241022 -> claude-sonnet-4-6)
+    if (BUILTIN_MODEL_MAPPINGS[trimmed]) {
+        const target = BUILTIN_MODEL_MAPPINGS[trimmed];
+        logger.info(`[OpenAI-Mapper] Built-in mapped ${trimmed} -> ${target}`);
         return target;
     }
 

@@ -1,6 +1,6 @@
 {
   "name": "gravityroute",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "GravityRoute - High-performance AI proxy router & multi-account load balancer for Claude, Gemini, and custom AI models with real-time Web Management Console.",
   "main": "src/index.js",
   "type": "module",
