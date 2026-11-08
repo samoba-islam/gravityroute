@@ -1,0 +1,22 @@
+{
+  "name": "gravityroute-worker",
+  "version": "1.0.0",
+  "description": "GravityRoute for Cloudflare Workers - High-performance AI proxy router for Claude & Gemini models backed by Cloudflare D1.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:init:local": "wrangler d1 execute DB --local --file=schema.sql",
+    "db:init:remote": "wrangler d1 execute DB --remote --file=schema.sql"
+  },
+  "dependencies": {
+    "hono": "^4.7.2"
+  },
+  "devDependencies": {
+    "wrangler": "^3.111.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
